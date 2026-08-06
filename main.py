@@ -109,6 +109,44 @@ async def create_thought(ctx, params: CreateThoughtParams) -> ActionResult:
 
 
 @chat.function(
+    "start_thought",
+    description=(
+        "Start a brand-new Thought from the empty composer (no title field -- "
+        "the title is auto-derived from the first message), the same way a "
+        "fresh 'New chat' begins from your first message. Used by the "
+        "always-on empty composer at the bottom of the New-thought screen."
+    ),
+    action_type="write",
+    effects=["thought.create"],
+)
+async def start_thought(ctx, params: StartThoughtParams) -> ActionResult:
+    now = now_iso()
+    title = auto_title_from_message(params.first_message)
+    doc = await ctx.store.create("thoughts", {
+        "title": title,
+        "status": "open",
+        "message_count": 0,
+        "chain_id": "",
+        "imported_from_code": False,
+        "created_at": now,
+        "last_activity_at": now,
+    })
+    if params.first_message.strip():
+        await ctx.store.create("thought_messages", {
+            "thought_id": doc.id,
+            "role": "user",
+            "text": params.first_message,
+            "created_at": now,
+        })
+        await ctx.store.update("thoughts", doc.id, {"message_count": 1, "last_activity_at": now})
+    return ActionResult.success(
+        summary=f"Started a new Thought: {title}",
+        data={"thought_id": doc.id},
+        refresh_panels=["thoughts", "thought_detail"],
+    )
+
+
+@chat.function(
     "add_thought_message",
     description="Append a message to an existing Thought's discussion — either the user's own words or Webbee's reply, keeping the running conversation.",
     action_type="write",

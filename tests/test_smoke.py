@@ -13,7 +13,7 @@ from imperal_sdk.testing import MockContext
 
 import main as m
 from schemas import (
-    CreateThoughtParams, AddThoughtMessageParams, ListThoughtsParams,
+    CreateThoughtParams, StartThoughtParams, AddThoughtMessageParams, ListThoughtsParams,
     GetThoughtParams, ArchiveThoughtParams,
     CreateThoughtChainFromThoughtParams, ListThoughtChainsParams,
     ProposeActionParams, ListProposedActionsParams, RespondToActionParams,
@@ -54,6 +54,37 @@ async def test_create_thought_without_first_message_starts_at_zero():
     assert result.status == "success"
     thought_id = result.data["thought_id"]
     thought_doc = await ctx.store.get("thoughts", thought_id)
+    assert thought_doc.data["message_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_start_thought_auto_titles_from_first_message():
+    ctx = MockContext()
+    result = await m.start_thought(ctx, StartThoughtParams(
+        first_message="Thinking clients could refer other clients for a discount.\nMore detail on the second line.",
+    ))
+    assert result.status == "success"
+    thought_id = result.data["thought_id"]
+
+    thought_doc = await ctx.store.get("thoughts", thought_id)
+    assert thought_doc.data["title"] == "Thinking clients could refer other clients for a discount."
+    assert thought_doc.data["status"] == "open"
+    assert thought_doc.data["message_count"] == 1
+
+    msgs = await ctx.store.query("thought_messages", where={"thought_id": thought_id})
+    assert len(msgs.data) == 1
+    assert msgs.data[0].data["role"] == "user"
+    assert msgs.data[0].data["text"].startswith("Thinking clients could refer")
+
+
+@pytest.mark.asyncio
+async def test_start_thought_falls_back_to_new_thought_title_when_blank():
+    ctx = MockContext()
+    result = await m.start_thought(ctx, StartThoughtParams(first_message=""))
+    assert result.status == "success"
+    thought_id = result.data["thought_id"]
+    thought_doc = await ctx.store.get("thoughts", thought_id)
+    assert thought_doc.data["title"] == "New thought"
     assert thought_doc.data["message_count"] == 0
 
 
