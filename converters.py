@@ -20,6 +20,46 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def auto_title_from_message(text: str, max_len: int = 60) -> str:
+    """Derive a short title from a first message, the same way ChatGPT titles
+    an untitled chat -- first line, trimmed, ellipsised if long."""
+    first_line = (text or "").strip().splitlines()[0] if (text or "").strip() else ""
+    if not first_line:
+        return "New thought"
+    return first_line if len(first_line) <= max_len else first_line[: max_len - 1].rstrip() + "…"
+
+
+def group_label_for(iso_ts: str) -> str:
+    """Bucket a timestamp into the ChatGPT-style sidebar groups."""
+    if not iso_ts:
+        return "Older"
+    try:
+        ts = datetime.fromisoformat(iso_ts)
+    except ValueError:
+        return "Older"
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    days = (datetime.now(timezone.utc).date() - ts.date()).days
+    if days <= 0:
+        return "Today"
+    if days == 1:
+        return "Yesterday"
+    if days <= 7:
+        return "Previous 7 days"
+    return "Older"
+
+
+def group_thoughts_by_recency(docs) -> list[tuple[str, list]]:
+    """Group already-sorted (newest first) thought docs into ordered
+    (label, [docs]) buckets, only including labels that have entries."""
+    order = ["Today", "Yesterday", "Previous 7 days", "Older"]
+    buckets: dict[str, list] = {label: [] for label in order}
+    for d in docs:
+        label = group_label_for(d.data.get("last_activity_at", ""))
+        buckets[label].append(d)
+    return [(label, buckets[label]) for label in order if buckets[label]]
+
+
 def new_share_token() -> str:
     """URL-safe, unguessable share token. Not a credential — just an
     unguessable id — so plain secrets.token_urlsafe is the right tool here
@@ -35,7 +75,7 @@ def to_thought(doc) -> Thought:
         status=d.get("status", "open"),
         message_count=d.get("message_count", 0),
         project_id=d.get("project_id", ""),
-        imported_from_token=d.get("imported_from_token", ""),
+        imported_from_code=d.get("imported_from_code", False),
         created_at=d.get("created_at", ""),
         last_activity_at=d.get("last_activity_at", ""),
     )

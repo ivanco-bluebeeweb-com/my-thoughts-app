@@ -107,6 +107,13 @@ class CreateThoughtParams(BaseModel):
     )
 
 
+class StartThoughtParams(BaseModel):
+    """Used by the empty-composer UI: no separate title field -- the title
+    is auto-derived from the first message, the same way ChatGPT starts an
+    untitled chat from your first message."""
+    first_message: str = Field(description="The FULL first message content -- the actual text, never a placeholder.")
+
+
 class AddThoughtMessageParams(BaseModel):
     thought_id: str = Field(description="Thought UUID. Obtain from list_thoughts — never invent.")
     role: str = Field(default="user", description="Who is speaking: 'user' or 'webbee'.")
@@ -124,6 +131,11 @@ class GetThoughtParams(BaseModel):
 
 class ArchiveThoughtParams(BaseModel):
     thought_id: str = Field(description="Thought UUID.")
+
+
+class RenameThoughtParams(BaseModel):
+    thought_id: str = Field(description="Thought UUID.")
+    title: str = Field(description="New title for the thought.")
 
 
 class CreateProjectFromThoughtParams(BaseModel):

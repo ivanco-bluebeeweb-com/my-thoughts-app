@@ -36,8 +36,8 @@ from schemas import (
     Thought, ThoughtList, ThoughtMessage, ThoughtMessageList,
     Project, ProjectList, ProposedAction, ProposedActionList,
     ShareLink, ShareLinkList,
-    CreateThoughtParams, AddThoughtMessageParams, ListThoughtsParams,
-    GetThoughtParams, ArchiveThoughtParams,
+    CreateThoughtParams, StartThoughtParams, AddThoughtMessageParams, ListThoughtsParams,
+    GetThoughtParams, ArchiveThoughtParams, RenameThoughtParams,
     CreateProjectFromThoughtParams, ListProjectsParams,
     ListProposedActionsParams, ProposeActionParams, RespondToActionParams,
     CreateShareLinkParams, ListShareLinksParams, ForgetShareParams,
@@ -47,6 +47,7 @@ from converters import (
     now_iso, to_thought, to_message, to_project,
     to_proposed_action, to_share_link, looks_actionable, hours_since,
     encode_share_code, decode_share_code,
+    auto_title_from_message, group_thoughts_by_recency,
 )
 
 ext = Extension(
@@ -87,7 +88,7 @@ async def create_thought(ctx, params: CreateThoughtParams) -> ActionResult:
         "status": "open",
         "message_count": 0,
         "project_id": "",
-        "imported_from_token": "",
+        "imported_from_code": False,
         "created_at": now,
         "last_activity_at": now,
     })
@@ -187,6 +188,24 @@ async def archive_thought(ctx, params: ArchiveThoughtParams) -> ActionResult:
     )
 
 
+@chat.function(
+    "rename_thought",
+    description="Rename a Thought's title.",
+    action_type="write",
+    effects=["thought.update"],
+)
+async def rename_thought(ctx, params: RenameThoughtParams) -> ActionResult:
+    thought = await ctx.store.get("thoughts", params.thought_id)
+    if thought is None:
+        return ActionResult.error("Thought not found.", code="THOUGHT_NOT_FOUND")
+    await ctx.store.update("thoughts", params.thought_id, {"title": params.title})
+    return ActionResult.success(
+        summary=f"Renamed to '{params.title}'.",
+        data={"thought_id": params.thought_id, "title": params.title},
+        refresh_panels=["thoughts", "thought_detail"],
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # Projects — what a Thought graduates into
 # ──────────────────────────────────────────────────────────────────────────
@@ -215,7 +234,7 @@ async def create_project_from_thought(ctx, params: CreateProjectFromThoughtParam
     return ActionResult.success(
         summary=f"Project '{params.name}' created from thought.",
         data={"project_id": proj.id, "thought_id": params.thought_id},
-        refresh_panels=["thoughts", "projects"],
+        refresh_panels=["thoughts", "thought_detail"],
     )
 
 
@@ -259,7 +278,7 @@ async def propose_action(ctx, params: ProposeActionParams) -> ActionResult:
     return ActionResult.success(
         summary=f"Proposed: {params.title}",
         data={"action_id": doc.id},
-        refresh_panels=["actions", "thought_detail"],
+        refresh_panels=["thought_detail"],
     )
 
 
@@ -295,7 +314,7 @@ async def respond_to_action(ctx, params: RespondToActionParams) -> ActionResult:
     return ActionResult.success(
         summary=f"Action {new_status}.",
         data={"action_id": params.action_id, "status": new_status},
-        refresh_panels=["actions"],
+        refresh_panels=["thought_detail"],
     )
 
 
@@ -518,14 +537,16 @@ async def _scan_one_user(user_ctx) -> None:
                 f"While you were away I looked back over your open Thoughts and have "
                 f"{len(proposed_titles)} idea(s) for what to do next:\n\n{lines}\n\n"
                 f"Open **My Thoughts** to approve or dismiss them.",
-                refresh_panels=["actions", "thoughts"],
+                refresh_panels=["thoughts", "thought_detail"],
             )
         except Exception:
             pass
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Panels
+# Panels — ChatGPT-shaped: left = conversation list + always-visible
+# Projects, center = the open thread (or an empty composer by default),
+# right = reserved empty slot for future use (per explicit user decision).
 # ──────────────────────────────────────────────────────────────────────────
 
 _STATUS_COLOR = {"open": "blue", "archived": "gray", "pending": "yellow", "approved": "green", "dismissed": "gray"}
@@ -541,8 +562,34 @@ _STATUS_COLOR = {"open": "blue", "archived": "gray", "pending": "yellow", "appro
     max_width=460,
 )
 async def thoughts_panel(ctx, status: str = "open", **kwargs) -> object:
-    page = await ctx.store.query("thoughts", where={"status": status} if status else None, order_by="-last_activity_at", limit=100)
-    docs = page.data
+    thoughts_page = await ctx.store.query(
+        "thoughts", where={"status": status} if status else None, order_by="-last_activity_at", limit=100,
+    )
+    projects_page = await ctx.store.query("projects", order_by="-created_at", limit=50)
+
+    new_thought_button = ui.Button(
+        "+ New thought", variant="primary", size="sm", full_width=True,
+        on_click=ui.Call("__panel__thought_detail"),  # no thought_id -> empty composer
+    )
+
+    # Projects: always visible (per explicit decision), never collapsed away.
+    project_items = [
+        ui.ListItem(
+            id=p.id,
+            title=p.data.get("name", "(untitled project)"),
+            subtitle=p.data.get("description", "")[:60],
+            icon="📁",
+            badge=ui.Badge(p.data.get("status", "active"), color="green" if p.data.get("status") == "active" else "gray"),
+            on_click=ui.Call("__panel__thought_detail", thought_id=p.data.get("thought_id", "")),
+        )
+        for p in projects_page.data
+    ]
+    projects_section = ui.Section(
+        title="📁 Projects",
+        children=[ui.List(items=project_items)] if project_items else [
+            ui.Text("No projects yet — turn a thought into one from its detail view.", variant="caption"),
+        ],
+    )
 
     filter_row = ui.Select(
         options=[{"value": "open", "label": "Open"}, {"value": "archived", "label": "Archived"}, {"value": "", "label": "All"}],
@@ -550,41 +597,74 @@ async def thoughts_panel(ctx, status: str = "open", **kwargs) -> object:
         param_name="status",
         on_change=ui.Call("__panel__thoughts"),
     )
-    actions_button = ui.Button(
-        "🔔 Proposed actions", variant="secondary", size="sm", full_width=True,
-        on_click=ui.Call("__panel__actions"),
-    )
-    projects_button = ui.Button(
-        "📁 Projects", variant="secondary", size="sm", full_width=True,
-        on_click=ui.Call("__panel__projects"),
-    )
 
-    if not docs:
-        return ui.Stack(direction="v", gap=3, children=[
-            filter_row, actions_button, projects_button,
-            ui.Empty(message="No thoughts yet — just tell Webbee an idea to start one.", icon="💭"),
+    if not thoughts_page.data:
+        thoughts_section = ui.Section(title="💭 Thoughts", children=[
+            filter_row,
+            ui.Empty(message="No thoughts yet — start one above.", icon="💭"),
         ])
+    else:
+        grouped = group_thoughts_by_recency(thoughts_page.data)
+        group_children = [filter_row]
+        for label, docs in grouped:
+            items = [
+                ui.ListItem(
+                    id=d.id,
+                    title=d.data.get("title", "(untitled)"),
+                    subtitle=f"{d.data.get('message_count', 0)} messages",
+                    badge=ui.Badge(d.data.get("status", "open"), color=_STATUS_COLOR.get(d.data.get("status", "open"), "gray")),
+                    on_click=ui.Call("__panel__thought_detail", thought_id=d.id),
+                    actions=[
+                        {"icon": "Edit2", "on_click": ui.Call("__panel__thought_detail", thought_id=d.id, renaming=True)},
+                        {"icon": "Archive", "on_click": ui.Call("archive_thought", thought_id=d.id), "confirm": "Archive this thought?"},
+                    ],
+                )
+                for d in docs
+            ]
+            group_children.append(ui.Section(title=label, children=[ui.List(items=items)]))
+        thoughts_section = ui.Section(title="💭 Thoughts", children=group_children)
 
-    items = [
-        ui.ListItem(
-            id=d.id,
-            title=d.data.get("title", "(untitled)"),
-            subtitle=f"{d.data.get('message_count', 0)} messages",
-            badge=ui.Badge(d.data.get("status", "open"), color=_STATUS_COLOR.get(d.data.get("status", "open"), "gray")),
-            on_click=ui.Call("__panel__thought_detail", thought_id=d.id),
-        )
-        for d in docs
-    ]
-    return ui.Stack(direction="v", gap=3, children=[
-        filter_row, actions_button, projects_button,
-        ui.List(items=items, searchable=True),
+    root = ui.Stack(direction="v", gap=3, children=[
+        new_thought_button,
+        projects_section,
+        ui.Divider(),
+        thoughts_section,
     ])
+    # Land on an empty "New thought" composer by default -- exactly like a
+    # fresh chat client, per the explicit decision not to auto-open the
+    # most recent thread. Fires once per discovery cycle.
+    root.props["auto_action"] = ui.Call("__panel__thought_detail")
+    return root
+
+
+def _composer(thought_id: str) -> object:
+    """Shared message-input row: same shape whether starting fresh or
+    continuing an existing thought -- only the target function differs."""
+    if thought_id:
+        return ui.TextArea(
+            placeholder="Reply...",
+            rows=2,
+            param_name="text",
+            on_submit=ui.Call("add_thought_message", thought_id=thought_id, role="user"),
+        )
+    return ui.TextArea(
+        placeholder="Tell Webbee an idea...",
+        rows=3,
+        param_name="first_message",
+        on_submit=ui.Call("start_thought"),
+    )
 
 
 @ext.panel("thought_detail", slot="center", title="Thought", icon="💭", center_overlay=True)
-async def thought_detail_panel(ctx, thought_id: str = "", **kwargs) -> object:
+async def thought_detail_panel(ctx, thought_id: str = "", show_share: bool = False, renaming: bool = False, **kwargs) -> object:
+    # No thought_id -- this IS the default landing state (empty composer),
+    # reached via auto_action below, exactly like a fresh "New chat".
     if not thought_id:
-        return ui.Empty(message="Select a Thought from the list to see the discussion.", icon="💭")
+        return ui.Stack(direction="v", gap=4, children=[
+            ui.Header(text="New thought", subtitle="Tell Webbee what's on your mind."),
+            ui.Empty(message="Start typing below to begin a new discussion.", icon="💭"),
+            _composer(""),
+        ])
 
     thought = await ctx.store.get("thoughts", thought_id)
     if thought is None:
@@ -593,7 +673,45 @@ async def thought_detail_panel(ctx, thought_id: str = "", **kwargs) -> object:
     msgs_page = await ctx.store.query("thought_messages", where={"thought_id": thought_id}, order_by="created_at", limit=200)
     actions_page = await ctx.store.query("proposed_actions", where={"thought_id": thought_id, "status": "pending"}, limit=20)
 
-    header = ui.Header(text=thought.data.get("title", "(untitled)"), subtitle=f"Status: {thought.data.get('status', 'open')}")
+    if renaming:
+        header = ui.Stack(direction="v", gap=2, children=[
+            ui.Input(
+                placeholder="Thought title",
+                value=thought.data.get("title", ""),
+                param_name="title",
+                type="text",
+                on_submit=ui.Call("rename_thought", thought_id=thought_id),
+            ),
+            ui.Text("Press Enter to save.", variant="caption"),
+        ])
+    else:
+        header = ui.Header(text=thought.data.get("title", "(untitled)"), subtitle=f"Status: {thought.data.get('status', 'open')}")
+
+    header_actions = ui.Row(gap=2, children=[
+        ui.Button("🔗 Share", variant="secondary", size="sm",
+                  on_click=ui.Call("__panel__thought_detail", thought_id=thought_id, show_share=not show_share)),
+        (ui.Button("📁 Turn into a Project", variant="primary", size="sm",
+                   on_click=ui.Call("create_project_from_thought", thought_id=thought_id, name=thought.data.get("title", "")))
+         if not thought.data.get("project_id") else ui.Badge("Project ✅", color="green")),
+    ])
+
+    # Inline share panel -- no modal (Dialog has no click trigger to open
+    # it from), so the code is just revealed in-place on the same panel.
+    share_block = None
+    if show_share:
+        share_block = ui.Card(
+            title="Share this thought",
+            content=ui.Stack(direction="v", gap=2, children=[
+                ui.Text(
+                    "This creates a one-time snapshot code -- not a live link. "
+                    "Whoever imports it gets an independent copy; it won't update "
+                    "as you keep talking here, and it can't be revoked once shared.",
+                    variant="caption",
+                ),
+                ui.Button("Generate share code", variant="primary", size="sm",
+                          on_click=ui.Call("create_share_link", thought_id=thought_id)),
+            ]),
+        )
 
     timeline_children = []
     for m in msgs_page.data:
@@ -601,9 +719,9 @@ async def thought_detail_panel(ctx, thought_id: str = "", **kwargs) -> object:
         timeline_children.append(ui.Text(f"**{who}:** {m.data.get('text', '')}", variant="body"))
     timeline = ui.Stack(direction="v", gap=2, children=timeline_children) if timeline_children else ui.Empty(message="No messages yet.", icon="💬")
 
-    action_cards = []
+    action_chips = []
     for a in actions_page.data:
-        action_cards.append(ui.Card(
+        action_chips.append(ui.Card(
             title=f"🔔 {a.data.get('title', '')}",
             content=ui.Stack(direction="v", gap=2, children=[
                 ui.Text(a.data.get("rationale", ""), variant="caption"),
@@ -616,62 +734,16 @@ async def thought_detail_panel(ctx, thought_id: str = "", **kwargs) -> object:
             ]),
         ))
 
-    graduate_button = ui.Button(
-        "📁 Turn into a Project", variant="primary", size="sm", full_width=True,
-        on_click=ui.Call("create_project_from_thought", thought_id=thought_id, name=thought.data.get("title", "")),
-    ) if not thought.data.get("project_id") else ui.Text("✅ Already a Project", variant="caption")
-
-    share_button = ui.Button(
-        "🔗 Create share link", variant="secondary", size="sm", full_width=True,
-        on_click=ui.Call("create_share_link", thought_id=thought_id),
-    )
-
-    return ui.Stack(direction="v", gap=4, children=[
-        header,
-        ui.Card(title="Discussion", content=timeline),
-        *action_cards,
-        ui.Divider(),
-        graduate_button,
-        share_button,
-    ])
+    body = [header, header_actions]
+    if share_block:
+        body.append(share_block)
+    body.extend(action_chips)
+    body.append(ui.Card(title="Discussion", content=timeline))
+    body.append(_composer(thought_id))
+    return ui.Stack(direction="v", gap=4, children=body)
 
 
-@ext.panel("actions", slot="right", title="Proposed Actions", icon="🔔", default_width=320)
-async def actions_panel(ctx, **kwargs) -> object:
-    page = await ctx.store.query("proposed_actions", where={"status": "pending"}, order_by="-created_at", limit=100)
-    if not page.data:
-        return ui.Empty(message="No pending suggestions right now — Webbee checks your open Thoughts daily.", icon="🔔")
-
-    cards = []
-    for a in page.data:
-        cards.append(ui.Card(
-            title=a.data.get("title", ""),
-            content=ui.Stack(direction="v", gap=2, children=[
-                ui.Text(a.data.get("rationale", ""), variant="caption"),
-                ui.Row(gap=2, children=[
-                    ui.Button("Approve", variant="primary", size="sm",
-                              on_click=ui.Call("respond_to_action", action_id=a.id, decision="approve")),
-                    ui.Button("Dismiss", variant="secondary", size="sm",
-                              on_click=ui.Call("respond_to_action", action_id=a.id, decision="dismiss")),
-                ]),
-            ]),
-        ))
-    return ui.Stack(direction="v", gap=3, children=cards)
-
-
-@ext.panel("projects", slot="right", title="Projects", icon="📁", default_width=320)
-async def projects_panel(ctx, **kwargs) -> object:
-    page = await ctx.store.query("projects", order_by="-created_at", limit=100)
-    if not page.data:
-        return ui.Empty(message="No projects yet — graduate a Thought into one from its detail view.", icon="📁")
-    items = [
-        ui.ListItem(
-            id=d.id,
-            title=d.data.get("name", ""),
-            subtitle=d.data.get("description", "")[:80],
-            badge=ui.Badge(d.data.get("status", "active"), color="green" if d.data.get("status") == "active" else "gray"),
-            on_click=ui.Call("__panel__thought_detail", thought_id=d.data.get("thought_id", "")),
-        )
-        for d in page.data
-    ]
-    return ui.Stack(direction="v", gap=3, children=[ui.List(items=items, searchable=True)])
+@ext.panel("thought_context", slot="right", title="Context", icon="🧭", default_width=320)
+async def thought_context_panel(ctx, **kwargs) -> object:
+    """Reserved for future use -- deliberately empty for now."""
+    return ui.Empty(message="Nothing here yet.", icon="🧭")

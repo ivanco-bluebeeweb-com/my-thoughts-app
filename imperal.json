@@ -471,6 +471,42 @@
       "owner_chat_tool": "my_thoughts"
     },
     {
+      "name": "rename_thought",
+      "description": "Rename a Thought's title.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "thought.update"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "thought_id": {
+            "description": "Thought UUID.",
+            "title": "Thought Id",
+            "type": "string"
+          },
+          "title": {
+            "description": "New title for the thought.",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought_id",
+          "title"
+        ],
+        "title": "RenameThoughtParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
       "name": "create_project_from_thought",
       "description": "Graduate a Thought into a Project — the moment an idea becomes something to actually execute. Does not by itself create anything in Trello/Asana/etc — pair it with a real tool call on the target app if the user wants that.",
       "action_type": "write",
@@ -1237,21 +1273,11 @@
       "center_overlay": true
     },
     {
-      "panel_id": "actions",
+      "panel_id": "thought_context",
       "slot": "right",
-      "title": "Proposed Actions",
+      "title": "Context",
       "tree": {},
-      "icon": "🔔",
-      "refresh": "manual",
-      "center_overlay": false,
-      "default_width": 320
-    },
-    {
-      "panel_id": "projects",
-      "slot": "right",
-      "title": "Projects",
-      "tree": {},
-      "icon": "📁",
+      "icon": "🧭",
       "refresh": "manual",
       "center_overlay": false,
       "default_width": 320
