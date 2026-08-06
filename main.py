@@ -740,26 +740,31 @@ def _composer(thought_id: str) -> object:
     """Shared message-input row: same shape whether starting fresh or
     continuing an existing thought -- only the target function differs.
 
+    Wrapped in ui.Form with a visible Send button -- a bare TextArea with
+    only on_submit has no confirmed Enter-to-send behavior on this platform
+    (unlike ui.Input, TextArea's own docs make no such promise, and Enter in
+    a multi-line field conventionally inserts a newline instead). ui.Form is
+    the one platform-confirmed mechanism that reliably collects a field's
+    live value into a single submitted call, via an explicit button.
+
     Includes a voice-note attach control. STUB, stated honestly: this
     platform has no live microphone-capture UI primitive (verified against
     the real ui.* set -- ui.Audio is playback-only), so this is an
     already-recorded-file upload, not a record button, and it does not
     transcribe -- see attach_voice_note's docstring."""
-    text_field = (
-        ui.TextArea(
-            placeholder="Reply...",
-            rows=2,
-            param_name="text",
-            on_submit=ui.Call("add_thought_message", thought_id=thought_id, role="user"),
+    if thought_id:
+        message_form = ui.Form(
+            action="add_thought_message",
+            submit_label="Send",
+            defaults={"thought_id": thought_id, "role": "user"},
+            children=[ui.TextArea(placeholder="Reply...", rows=2, param_name="text")],
         )
-        if thought_id
-        else ui.TextArea(
-            placeholder="Tell Webbee an idea...",
-            rows=3,
-            param_name="first_message",
-            on_submit=ui.Call("start_thought"),
+    else:
+        message_form = ui.Form(
+            action="start_thought",
+            submit_label="Start",
+            children=[ui.TextArea(placeholder="Tell Webbee an idea...", rows=3, param_name="first_message")],
         )
-    )
     voice_upload = ui.FileUpload(
         accept="audio/*",
         param_name="files",
@@ -769,7 +774,7 @@ def _composer(thought_id: str) -> object:
         "🎤 Attach voice note — upload a recording (not live dictation yet, and it isn't transcribed).",
         variant="caption",
     )
-    return ui.Stack(direction="v", gap=2, children=[text_field, voice_caption, voice_upload])
+    return ui.Stack(direction="v", gap=2, children=[message_form, voice_caption, voice_upload])
 
 
 @ext.panel("thought_detail", slot="center", title="Thought", icon="💭", center_overlay=True)
