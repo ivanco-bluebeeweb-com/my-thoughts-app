@@ -1,0 +1,1260 @@
+{
+  "manifest_schema_version": 3,
+  "sdk_version": "5.9.13",
+  "app_id": "my-thoughts-app",
+  "version": "0.1.0",
+  "name": "My Thoughts",
+  "description": "Discuss your ideas with Webbee over time, turn discussions into projects, and share select discussions with other users. Webbee analyzes your thoughts in the background and proposes concrete next actions across your other apps.",
+  "icon": "icon.svg",
+  "actions_explicit": true,
+  "system": false,
+  "capabilities": [],
+  "tools": [
+    {
+      "name": "create_thought",
+      "description": "Start a new Thought — a discussion thread for one idea. Optionally seed it with the user's first message.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "thought.create"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "title": {
+            "description": "Short title for the idea/discussion (1 sentence max).",
+            "title": "Title",
+            "type": "string"
+          },
+          "first_message": {
+            "default": "",
+            "description": "The FULL first message content, if the user already said something worth recording as the opening of the discussion. Write the actual text — never a placeholder.",
+            "title": "First Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CreateThoughtParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "add_thought_message",
+      "description": "Append a message to an existing Thought's discussion — either the user's own words or Webbee's reply, keeping the running conversation.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "thought.update"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "thought_id": {
+            "description": "Thought UUID. Obtain from list_thoughts — never invent.",
+            "title": "Thought Id",
+            "type": "string"
+          },
+          "role": {
+            "default": "user",
+            "description": "Who is speaking: 'user' or 'webbee'.",
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "description": "The FULL message text — the actual content, never a placeholder.",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought_id",
+          "text"
+        ],
+        "title": "AddThoughtMessageParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "list_thoughts",
+      "description": "List the user's Thoughts (discussion threads), optionally filtered by status.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "status": {
+            "default": "",
+            "description": "Optional filter: 'open' or 'archived'. Empty = all.",
+            "title": "Status",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Max thoughts to return.",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "ListThoughtsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "Thought": {
+            "description": "One idea/discussion thread — the core unit of My Thoughts.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "default": "",
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "default": "",
+                "title": "Status",
+                "type": "string"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "message_count": {
+                "default": 0,
+                "title": "Message Count",
+                "type": "integer"
+              },
+              "project_id": {
+                "default": "",
+                "title": "Project Id",
+                "type": "string"
+              },
+              "imported_from_code": {
+                "default": false,
+                "title": "Imported From Code",
+                "type": "boolean"
+              },
+              "created_at": {
+                "default": "",
+                "title": "Created At",
+                "type": "string"
+              },
+              "last_activity_at": {
+                "default": "",
+                "title": "Last Activity At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "title": "Thought",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/Thought"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ThoughtList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "get_thought",
+      "description": "Read one Thought's full discussion history (all messages in order).",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "thought_id": {
+            "description": "Thought UUID.",
+            "title": "Thought Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought_id"
+        ],
+        "title": "GetThoughtParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "ThoughtMessage": {
+            "description": "One message in a thought's discussion timeline.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "default": "",
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "thought_id": {
+                "default": "",
+                "title": "Thought Id",
+                "type": "string"
+              },
+              "role": {
+                "default": "",
+                "title": "Role",
+                "type": "string"
+              },
+              "text": {
+                "default": "",
+                "title": "Text",
+                "type": "string"
+              },
+              "created_at": {
+                "default": "",
+                "title": "Created At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "title": "ThoughtMessage",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ThoughtMessage"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ThoughtMessageList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "archive_thought",
+      "description": "Archive a Thought — keeps it, but takes it out of active background analysis and the default list.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "thought.update"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "thought_id": {
+            "description": "Thought UUID.",
+            "title": "Thought Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought_id"
+        ],
+        "title": "ArchiveThoughtParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "create_project_from_thought",
+      "description": "Graduate a Thought into a Project — the moment an idea becomes something to actually execute. Does not by itself create anything in Trello/Asana/etc — pair it with a real tool call on the target app if the user wants that.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "project.create",
+        "thought.update"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "thought_id": {
+            "description": "Thought UUID to graduate into a project.",
+            "title": "Thought Id",
+            "type": "string"
+          },
+          "name": {
+            "description": "Project name.",
+            "title": "Name",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "description": "Optional project description.",
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought_id",
+          "name"
+        ],
+        "title": "CreateProjectFromThoughtParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "list_projects",
+      "description": "List projects that were graduated from Thoughts.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "limit": {
+            "default": 50,
+            "description": "Max projects to return.",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "ListProjectsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "Project": {
+            "description": "A thought that graduated into something actionable.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "default": "",
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "default": "",
+                "title": "Description",
+                "type": "string"
+              },
+              "status": {
+                "default": "",
+                "title": "Status",
+                "type": "string"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "thought_id": {
+                "default": "",
+                "title": "Thought Id",
+                "type": "string"
+              },
+              "name": {
+                "default": "",
+                "title": "Name",
+                "type": "string"
+              },
+              "external_ref": {
+                "default": "",
+                "title": "External Ref",
+                "type": "string"
+              },
+              "created_at": {
+                "default": "",
+                "title": "Created At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "title": "Project",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/Project"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ProjectList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "propose_action",
+      "description": "Record a concrete next-action suggestion tied to a Thought, for the user to approve or dismiss later. Use this when reasoning about a Thought live in chat and you spot something worth doing — the same record background analysis also produces.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "proposed_action.create"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "description": "Used by Webbee (in chat, reasoning live) to record a suggestion tied\nto a thought — the same shape the background scan also writes, so both\npaths produce identical records.",
+        "properties": {
+          "thought_id": {
+            "description": "Thought UUID this suggestion relates to.",
+            "title": "Thought Id",
+            "type": "string"
+          },
+          "title": {
+            "description": "Short action title, e.g. 'Create a Trello board for this idea'.",
+            "title": "Title",
+            "type": "string"
+          },
+          "rationale": {
+            "description": "Why this action makes sense right now, in one or two sentences.",
+            "title": "Rationale",
+            "type": "string"
+          },
+          "target_app": {
+            "default": "",
+            "description": "Which installed app this would call, if any, e.g. 'trello-connector'.",
+            "title": "Target App",
+            "type": "string"
+          },
+          "target_tool": {
+            "default": "",
+            "description": "Which tool on that app, e.g. 'create_board'.",
+            "title": "Target Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought_id",
+          "title",
+          "rationale"
+        ],
+        "title": "ProposeActionParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "list_proposed_actions",
+      "description": "List Webbee's proposed next actions — from background analysis or live chat — optionally filtered by thought or status.",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "thought_id": {
+            "default": "",
+            "description": "Optional: only actions for this thought.",
+            "title": "Thought Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "pending",
+            "description": "Filter by status: pending | approved | dismissed | '' for all.",
+            "title": "Status",
+            "type": "string"
+          },
+          "limit": {
+            "default": 50,
+            "description": "Max actions to return.",
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "title": "ListProposedActionsParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "ProposedAction": {
+            "description": "One background-analysis suggestion tied to a thought.",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "default": "",
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "default": "",
+                "title": "Status",
+                "type": "string"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "thought_id": {
+                "default": "",
+                "title": "Thought Id",
+                "type": "string"
+              },
+              "rationale": {
+                "default": "",
+                "title": "Rationale",
+                "type": "string"
+              },
+              "target_app": {
+                "default": "",
+                "title": "Target App",
+                "type": "string"
+              },
+              "target_tool": {
+                "default": "",
+                "title": "Target Tool",
+                "type": "string"
+              },
+              "created_at": {
+                "default": "",
+                "title": "Created At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "title": "ProposedAction",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ProposedAction"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ProposedActionList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "respond_to_action",
+      "description": "Approve or dismiss one of Webbee's proposed actions. Approving does NOT execute it automatically — it just marks it accepted; the user (or Webbee in the same turn) then calls the real target tool.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "proposed_action.update"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "action_id": {
+            "description": "ProposedAction UUID.",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "decision": {
+            "description": "'approve' or 'dismiss'.",
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_id",
+          "decision"
+        ],
+        "title": "RespondToActionParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "create_share_link",
+      "description": "Create a share code for a Thought so another Imperal user can import a read-only snapshot of this discussion into their own My Thoughts. This is a snapshot at the moment of sharing (not a live link) and, once handed out, cannot be revoked — anyone with the code can decode it, so don't use this for sensitive discussions.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "sharelink.create"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "thought_id": {
+            "description": "Thought UUID to share.",
+            "title": "Thought Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought_id"
+        ],
+        "title": "CreateShareLinkParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "list_share_links",
+      "description": "List the shares you've created (local record only — for your own reference, not an access-control list).",
+      "action_type": "read",
+      "chain_callable": true,
+      "effects": [],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "thought_id": {
+            "default": "",
+            "description": "Optional: only links for this thought.",
+            "title": "Thought Id",
+            "type": "string"
+          }
+        },
+        "title": "ListShareLinksParams",
+        "type": "object"
+      },
+      "return_schema": {
+        "$defs": {
+          "ShareLink": {
+            "description": "Local bookkeeping record of a share the owner created -- the actual\nshare content travels self-contained in the code/url itself (see\ncreate_share_link), so this record is just \"things I've shared\", not\nan access-control gate (there is no live revoke for a code someone\nalready has -- see create_share_link's docstring).",
+            "properties": {
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ],
+                "title": "Id"
+              },
+              "title": {
+                "default": "",
+                "title": "Title",
+                "type": "string"
+              },
+              "kind": {
+                "default": "",
+                "title": "Kind",
+                "type": "string"
+              },
+              "subtitle": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Subtitle"
+              },
+              "description": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Description"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Status"
+              },
+              "url": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Url"
+              },
+              "thought_id": {
+                "default": "",
+                "title": "Thought Id",
+                "type": "string"
+              },
+              "label": {
+                "default": "",
+                "title": "Label",
+                "type": "string"
+              },
+              "created_at": {
+                "default": "",
+                "title": "Created At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "title": "ShareLink",
+            "type": "object",
+            "x-sdl": "entity"
+          }
+        },
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ShareLink"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Total"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "ShareLinkList",
+        "type": "object",
+        "x-sdl": "entity-list"
+      },
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "forget_share",
+      "description": "Remove a share record from your own local list. Does NOT invalidate a code you already handed out -- there is no way to revoke a share code once shared (be honest with the user about this).",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "sharelink.delete"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "label": {
+            "description": "Label of the local share record to remove from your own list (does not invalidate a code someone already has -- see create_share_link).",
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "ForgetShareParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "import_shared_thought",
+      "description": "Import a Thought another user shared with you — pass the full share_code they gave you. Creates your own independent copy you can keep discussing; it will not update if they keep talking in theirs.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "thought.create"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "share_code": {
+            "description": "The full share_code another user gave you (from their create_share_link result). Paste it exactly as received, unedited.",
+            "title": "Share Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "share_code"
+        ],
+        "title": "ImportSharedThoughtParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    }
+  ],
+  "signals": [],
+  "schedules": [
+    {
+      "name": "daily_thought_scan",
+      "cron": "0 8 * * *"
+    }
+  ],
+  "required_scopes": [],
+  "icon_size_bytes": 325,
+  "panels": [
+    {
+      "panel_id": "thoughts",
+      "slot": "left",
+      "title": "My Thoughts",
+      "tree": {},
+      "icon": "💭",
+      "refresh": "manual",
+      "center_overlay": false,
+      "default_width": 300,
+      "min_width": 240,
+      "max_width": 460
+    },
+    {
+      "panel_id": "thought_detail",
+      "slot": "center",
+      "title": "Thought",
+      "tree": {},
+      "icon": "💭",
+      "refresh": "manual",
+      "center_overlay": true
+    },
+    {
+      "panel_id": "actions",
+      "slot": "right",
+      "title": "Proposed Actions",
+      "tree": {},
+      "icon": "🔔",
+      "refresh": "manual",
+      "center_overlay": false,
+      "default_width": 320
+    },
+    {
+      "panel_id": "projects",
+      "slot": "right",
+      "title": "Projects",
+      "tree": {},
+      "icon": "📁",
+      "refresh": "manual",
+      "center_overlay": false,
+      "default_width": 320
+    }
+  ]
+}
