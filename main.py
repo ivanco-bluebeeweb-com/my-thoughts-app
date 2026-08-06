@@ -593,7 +593,7 @@ async def thought_detail_panel(ctx, thought_id: str = "", **kwargs) -> object:
     msgs_page = await ctx.store.query("thought_messages", where={"thought_id": thought_id}, order_by="created_at", limit=200)
     actions_page = await ctx.store.query("proposed_actions", where={"thought_id": thought_id, "status": "pending"}, limit=20)
 
-    header = ui.Header(title=thought.data.get("title", "(untitled)"), subtitle=f"Status: {thought.data.get('status', 'open')}")
+    header = ui.Header(text=thought.data.get("title", "(untitled)"), subtitle=f"Status: {thought.data.get('status', 'open')}")
 
     timeline_children = []
     for m in msgs_page.data:
