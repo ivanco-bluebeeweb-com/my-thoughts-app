@@ -1,10 +1,14 @@
 """My Thoughts — a Webbee-to-user discussion space.
 
-You bring an idea, we discuss it over time in a thread ("Thought"), and
-Webbee quietly analyzes the accumulated context in the background
-(@ext.schedule) to propose concrete next actions tied to real installed
-apps. A Thought can graduate into a Thought Chain, and can be shared with
-another Imperal user as a self-contained, read-only snapshot code.
+You bring an idea, we discuss it over time in a thread ("Thought") --
+and it works like a real chat: you write, Webbee actually replies right
+there, live, via ctx.ai.complete (see _generate_webbee_reply), not just
+a one-way note that sits unanswered. On top of that live back-and-forth,
+Webbee separately analyzes accumulated Thoughts in the background
+(@ext.schedule) to proactively propose concrete next actions tied to
+real installed apps, even without being asked. A Thought can graduate
+into a Thought Chain, and can be shared with another Imperal user as a
+self-contained, read-only snapshot code.
 
 Boundaries (by design):
 - does NOT execute proposed actions itself — it records a suggestion
@@ -76,6 +80,56 @@ chat = ChatExtension(
 # ──────────────────────────────────────────────────────────────────────────
 
 
+_WEBBEE_PERSONA_PROMPT = (
+    "You are Webbee, the AI of Imperal Cloud -- an original, simple-and-clear, "
+    "playful, lightly cheeky girl-agent, confident with a light spark, never "
+    "over the top. Always refer to yourself using feminine grammatical forms "
+    "(in any language that marks gender). You are having an ongoing written "
+    "discussion with the user inside 'My Thoughts' -- a space where they think "
+    "out loud with you about one idea over time, exactly like a real chat: "
+    "they write, you actually reply. Read the conversation so far and reply "
+    "directly and naturally to the user's latest message, in the same language "
+    "they wrote in. Keep it conversational -- a genuine reply, a few sentences, "
+    "not a report or a bullet list unless the content really calls for one. "
+    "You may close with your 🐝 signature occasionally, not every single time."
+)
+
+
+async def _generate_webbee_reply(ctx, thought_id: str, title: str) -> None:
+    """Make this actually behave like a chat: after the user writes, have
+    Webbee read the thread so far and really reply via ctx.ai.complete,
+    saving her answer as a role='webbee' message -- instead of the message
+    just sitting there unanswered like a one-way note."""
+    msgs_page = await ctx.store.query(
+        "thought_messages", where={"thought_id": thought_id}, order_by="created_at", limit=50,
+    )
+    transcript = "\n".join(
+        f"{'Webbee' if m.data.get('role') == 'webbee' else 'User'}: {m.data.get('text', '')}"
+        for m in msgs_page.data
+    )
+    prompt = f"{_WEBBEE_PERSONA_PROMPT}\n\nThought title: {title}\n\nConversation so far:\n{transcript}\n\nWebbee:"
+    try:
+        result = await ctx.ai.complete(prompt=prompt, model="")
+    except Exception:
+        return  # a failed reply must never break the user's own message
+    reply_text = (result.text or "").strip()
+    if not reply_text:
+        return
+    now = now_iso()
+    await ctx.store.create("thought_messages", {
+        "thought_id": thought_id,
+        "role": "webbee",
+        "text": reply_text,
+        "created_at": now,
+    })
+    thought = await ctx.store.get("thoughts", thought_id)
+    prev_count = int(thought.data.get("message_count", 0)) if thought else 0
+    await ctx.store.update("thoughts", thought_id, {
+        "message_count": prev_count + 1,
+        "last_activity_at": now,
+    })
+
+
 @chat.function(
     "create_thought",
     description="Start a new Thought — a discussion thread for one idea. Optionally seed it with the user's first message.",
@@ -101,10 +155,11 @@ async def create_thought(ctx, params: CreateThoughtParams) -> ActionResult:
             "created_at": now,
         })
         await ctx.store.update("thoughts", doc.id, {"message_count": 1, "last_activity_at": now})
+        await _generate_webbee_reply(ctx, doc.id, params.title)
     return ActionResult.success(
         summary=f"Started a new Thought: {params.title}",
         data={"thought_id": doc.id},
-        refresh_panels=["thoughts"],
+        refresh_panels=["thoughts", "thought_detail"],
     )
 
 
@@ -139,6 +194,7 @@ async def start_thought(ctx, params: StartThoughtParams) -> ActionResult:
             "created_at": now,
         })
         await ctx.store.update("thoughts", doc.id, {"message_count": 1, "last_activity_at": now})
+        await _generate_webbee_reply(ctx, doc.id, title)
     return ActionResult.success(
         summary=f"Started a new Thought: {title}",
         data={"thought_id": doc.id},
@@ -157,9 +213,10 @@ async def add_thought_message(ctx, params: AddThoughtMessageParams) -> ActionRes
     if thought is None:
         return ActionResult.error("Thought not found.", code="THOUGHT_NOT_FOUND")
     now = now_iso()
+    role = params.role if params.role in ("user", "webbee") else "user"
     await ctx.store.create("thought_messages", {
         "thought_id": params.thought_id,
-        "role": params.role if params.role in ("user", "webbee") else "user",
+        "role": role,
         "text": params.text,
         "created_at": now,
     })
@@ -168,6 +225,11 @@ async def add_thought_message(ctx, params: AddThoughtMessageParams) -> ActionRes
         "message_count": new_count,
         "last_activity_at": now,
     })
+    if role == "user":
+        # This is the actual "it's a chat" behavior: the user just wrote
+        # something in an existing thread, so Webbee reads it and really
+        # replies -- not just a note that sits there unanswered.
+        await _generate_webbee_reply(ctx, params.thought_id, thought.data.get("title", ""))
     return ActionResult.success(
         summary="Message added to the Thought.",
         data={"thought_id": params.thought_id, "message_count": new_count},

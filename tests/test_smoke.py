@@ -40,11 +40,12 @@ async def test_create_thought_creates_first_message_when_given():
     thought_doc = await ctx.store.get("thoughts", thought_id)
     assert thought_doc.data["title"] == "Should we build a referral program?"
     assert thought_doc.data["status"] == "open"
-    assert thought_doc.data["message_count"] == 1
+    assert thought_doc.data["message_count"] == 2  # user message + Webbee's live reply
 
-    msgs = await ctx.store.query("thought_messages", where={"thought_id": thought_id})
-    assert len(msgs.data) == 1
+    msgs = await ctx.store.query("thought_messages", where={"thought_id": thought_id}, order_by="created_at")
+    assert len(msgs.data) == 2
     assert msgs.data[0].data["role"] == "user"
+    assert msgs.data[1].data["role"] == "webbee"
 
 
 @pytest.mark.asyncio
@@ -69,12 +70,13 @@ async def test_start_thought_auto_titles_from_first_message():
     thought_doc = await ctx.store.get("thoughts", thought_id)
     assert thought_doc.data["title"] == "Thinking clients could refer other clients for a discount."
     assert thought_doc.data["status"] == "open"
-    assert thought_doc.data["message_count"] == 1
+    assert thought_doc.data["message_count"] == 2  # user message + Webbee's live reply
 
-    msgs = await ctx.store.query("thought_messages", where={"thought_id": thought_id})
-    assert len(msgs.data) == 1
+    msgs = await ctx.store.query("thought_messages", where={"thought_id": thought_id}, order_by="created_at")
+    assert len(msgs.data) == 2
     assert msgs.data[0].data["role"] == "user"
     assert msgs.data[0].data["text"].startswith("Thinking clients could refer")
+    assert msgs.data[1].data["role"] == "webbee"
 
 
 @pytest.mark.asyncio
@@ -86,6 +88,58 @@ async def test_start_thought_falls_back_to_new_thought_title_when_blank():
     thought_doc = await ctx.store.get("thoughts", thought_id)
     assert thought_doc.data["title"] == "New thought"
     assert thought_doc.data["message_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_start_thought_gets_a_real_webbee_reply_like_a_chat():
+    """The core of 'My Thoughts should work like a chat': you write, Webbee
+    actually replies -- not silence, not a report, a real second message."""
+    ctx = MockContext()
+    ctx.ai.set_response("referral", "Ooh I like this -- want me to sketch the discount tiers? 🐝")
+    result = await m.start_thought(ctx, StartThoughtParams(
+        first_message="Thinking about a referral program.",
+    ))
+    thought_id = result.data["thought_id"]
+
+    thought_doc = await ctx.store.get("thoughts", thought_id)
+    assert thought_doc.data["message_count"] == 2  # user message + Webbee's reply
+
+    msgs = await ctx.store.query("thought_messages", where={"thought_id": thought_id}, order_by="created_at")
+    assert len(msgs.data) == 2
+    assert msgs.data[0].data["role"] == "user"
+    assert msgs.data[1].data["role"] == "webbee"
+    assert msgs.data[1].data["text"] == "Ooh I like this -- want me to sketch the discount tiers? 🐝"
+
+
+@pytest.mark.asyncio
+async def test_start_thought_with_blank_message_never_calls_ai():
+    ctx = MockContext()
+    result = await m.start_thought(ctx, StartThoughtParams(first_message=""))
+    thought_id = result.data["thought_id"]
+    msgs = await ctx.store.query("thought_messages", where={"thought_id": thought_id})
+    assert len(msgs.data) == 0  # nothing to reply to -- no reply generated
+
+
+@pytest.mark.asyncio
+async def test_add_thought_message_from_user_gets_a_real_webbee_reply():
+    ctx = MockContext()
+    ctx.ai.set_response("competitors", "Yes please, send me their names and I'll dig in.")
+    created = await m.create_thought(ctx, CreateThoughtParams(title="Pricing page redesign"))
+    thought_id = created.data["thought_id"]
+
+    result = await m.add_thought_message(ctx, AddThoughtMessageParams(
+        thought_id=thought_id, role="user",
+        text="I looked at 3 competitors -- want their names?",
+    ))
+    assert result.status == "success"
+
+    thought_doc = await ctx.store.get("thoughts", thought_id)
+    assert thought_doc.data["message_count"] == 2  # the user's message + Webbee's reply
+
+    msgs = await ctx.store.query("thought_messages", where={"thought_id": thought_id}, order_by="created_at")
+    assert len(msgs.data) == 2
+    assert msgs.data[1].data["role"] == "webbee"
+    assert msgs.data[1].data["text"] == "Yes please, send me their names and I'll dig in."
 
 
 @pytest.mark.asyncio
@@ -141,7 +195,9 @@ async def test_get_thought_returns_messages_in_order():
 
     result = await m.get_thought(ctx, GetThoughtParams(thought_id=thought_id))
     assert result.status == "success"
-    assert len(result.data.items) == 2
+    # user message + auto Webbee reply from create_thought's first_message,
+    # plus the manually-added webbee message above == 3
+    assert len(result.data.items) == 3
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -368,10 +424,12 @@ async def test_import_shared_thought_creates_independent_local_copy():
     imported_doc = await importer_ctx.store.get("thoughts", new_id)
     assert imported_doc.data["title"] == "Idea to share (shared)"
     assert imported_doc.data["imported_from_code"] is True
-    assert imported_doc.data["message_count"] == 2
+    # user message + auto Webbee reply from create_thought, plus the
+    # manually-added webbee message above == 3
+    assert imported_doc.data["message_count"] == 3
 
     msgs = await importer_ctx.store.query("thought_messages", where={"thought_id": new_id})
-    assert len(msgs.data) == 2
+    assert len(msgs.data) == 3
 
     # Owner's original is untouched -- these are independent copies, not a live link.
     owner_doc = await owner_ctx.store.get("thoughts", thought_id)
