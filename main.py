@@ -763,11 +763,13 @@ def _composer(thought_id: str) -> object:
     voice_upload = ui.FileUpload(
         accept="audio/*",
         param_name="files",
-        title="🎤 Attach voice note",
-        hint="Upload an audio recording — not live dictation yet, and it isn't transcribed.",
         on_upload=ui.Call("attach_voice_note", thought_id=thought_id),
     )
-    return ui.Stack(direction="v", gap=2, children=[text_field, voice_upload])
+    voice_caption = ui.Text(
+        "🎤 Attach voice note — upload a recording (not live dictation yet, and it isn't transcribed).",
+        variant="caption",
+    )
+    return ui.Stack(direction="v", gap=2, children=[text_field, voice_caption, voice_upload])
 
 
 @ext.panel("thought_detail", slot="center", title="Thought", icon="💭", center_overlay=True)
