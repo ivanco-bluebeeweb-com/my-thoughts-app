@@ -198,7 +198,7 @@ async def attach_voice_note(ctx, params: AttachVoiceNoteParams) -> ActionResult:
 )
 async def list_thoughts(ctx, params: ListThoughtsParams) -> ActionResult:
     where = {"status": params.status} if params.status else None
-    page = await ctx.store.query("thoughts", where=where, order_by="-last_activity_at", limit=params.limit)
+    page = await ctx.store.query("thoughts", where=where, order_by="-created_at", limit=params.limit)
     items = [to_thought(d) for d in page.data]
     return ActionResult.success(
         summary=f"{len(items)} thought(s).",
@@ -658,7 +658,7 @@ _STATUS_COLOR = {"open": "blue", "archived": "gray", "pending": "yellow", "appro
 )
 async def thoughts_panel(ctx, status: str = "open", **kwargs) -> object:
     thoughts_page = await ctx.store.query(
-        "thoughts", where={"status": status} if status else None, order_by="-last_activity_at", limit=100,
+        "thoughts", where={"status": status} if status else None, order_by="-created_at", limit=100,
     )
     projects_page = await ctx.store.query("projects", order_by="-created_at", limit=50)
 
