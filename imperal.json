@@ -89,6 +89,41 @@
       "owner_chat_tool": "my_thoughts"
     },
     {
+      "name": "attach_voice_note",
+      "description": "Attach an uploaded audio recording to a Thought as a voice-note message. STUB: this platform has no live microphone-capture UI primitive, so this only accepts an already-recorded audio file the user uploads (not live dictation) -- and it does NOT transcribe it, there is no speech-to-text wired up. It records that a voice note was attached so the thread shows it happened; use add_thought_message for actual text content.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "thought.update"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "description": "Stub handler for the composer's audio-attach control. There is no\nlive microphone-capture UI primitive on this platform (verified against\nthe real ui.* primitive set: ui.Audio is playback-only) -- this accepts\nan already-recorded audio FILE the user uploads, and records that it was\nattached. It does NOT transcribe it; there is no speech-to-text wired up\nyet, and this function does not pretend otherwise.",
+        "properties": {
+          "thought_id": {
+            "default": "",
+            "description": "Thought UUID to attach the voice note to, or empty for a brand-new thought.",
+            "title": "Thought Id",
+            "type": "string"
+          },
+          "files": {
+            "description": "Uploaded file record(s) forwarded by the FileUpload widget.",
+            "items": {},
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "title": "AttachVoiceNoteParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
       "name": "list_thoughts",
       "description": "List the user's Thoughts (discussion threads), optionally filtered by status.",
       "action_type": "read",
@@ -540,6 +575,35 @@
           "name"
         ],
         "title": "CreateProjectFromThoughtParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
+      "name": "quick_new_project",
+      "description": "Start a brand-new Project directly, with no existing Thought yet -- for when the user just wants an empty project shell to fill in, the same way a fresh 'New chat' starts empty. Creates a companion Thought under the hood (Projects always grow from a Thought in this app's model) and immediately graduates it, so the user lands on one ready project, not a two-step flow.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "thought.create",
+        "project.create"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "properties": {
+          "name": {
+            "default": "",
+            "description": "Project name. Leave empty for a sensible default the user can rename later.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "QuickNewProjectParams",
         "type": "object"
       },
       "return_schema": {},

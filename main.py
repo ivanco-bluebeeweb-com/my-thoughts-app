@@ -36,9 +36,10 @@ from schemas import (
     Thought, ThoughtList, ThoughtMessage, ThoughtMessageList,
     Project, ProjectList, ProposedAction, ProposedActionList,
     ShareLink, ShareLinkList,
-    CreateThoughtParams, StartThoughtParams, AddThoughtMessageParams, ListThoughtsParams,
+    CreateThoughtParams, StartThoughtParams, AddThoughtMessageParams, AttachVoiceNoteParams,
+    ListThoughtsParams,
     GetThoughtParams, ArchiveThoughtParams, RenameThoughtParams,
-    CreateProjectFromThoughtParams, ListProjectsParams,
+    CreateProjectFromThoughtParams, QuickNewProjectParams, ListProjectsParams,
     ListProposedActionsParams, ProposeActionParams, RespondToActionParams,
     CreateShareLinkParams, ListShareLinksParams, ForgetShareParams,
     ImportSharedThoughtParams,
@@ -132,6 +133,59 @@ async def add_thought_message(ctx, params: AddThoughtMessageParams) -> ActionRes
     return ActionResult.success(
         summary="Message added to the Thought.",
         data={"thought_id": params.thought_id, "message_count": new_count},
+        refresh_panels=["thoughts", "thought_detail"],
+    )
+
+
+@chat.function(
+    "attach_voice_note",
+    description=(
+        "Attach an uploaded audio recording to a Thought as a voice-note "
+        "message. STUB: this platform has no live microphone-capture UI "
+        "primitive, so this only accepts an already-recorded audio file the "
+        "user uploads (not live dictation) -- and it does NOT transcribe it, "
+        "there is no speech-to-text wired up. It records that a voice note "
+        "was attached so the thread shows it happened; use add_thought_message "
+        "for actual text content."
+    ),
+    action_type="write",
+    effects=["thought.update"],
+)
+async def attach_voice_note(ctx, params: AttachVoiceNoteParams) -> ActionResult:
+    now = now_iso()
+    thought_id = params.thought_id
+    if not thought_id:
+        thought_doc = await ctx.store.create("thoughts", {
+            "title": "Voice note",
+            "status": "open",
+            "message_count": 0,
+            "project_id": "",
+            "imported_from_code": False,
+            "created_at": now,
+            "last_activity_at": now,
+        })
+        thought_id = thought_doc.id
+    else:
+        thought_doc = await ctx.store.get("thoughts", thought_id)
+        if thought_doc is None:
+            return ActionResult.error("Thought not found.", code="THOUGHT_NOT_FOUND")
+
+    n = len(params.files) if params.files else 0
+    label = f"🎤 [Voice note attached -- {n} file(s), not transcribed yet]" if n else "🎤 [Voice note attached]"
+    await ctx.store.create("thought_messages", {
+        "thought_id": thought_id,
+        "role": "user",
+        "text": label,
+        "created_at": now,
+    })
+    new_count = int(thought_doc.data.get("message_count", 0)) + 1
+    await ctx.store.update("thoughts", thought_id, {
+        "message_count": new_count,
+        "last_activity_at": now,
+    })
+    return ActionResult.success(
+        summary="Voice note attached (not transcribed -- no speech-to-text on this platform yet).",
+        data={"thought_id": thought_id, "message_count": new_count},
         refresh_panels=["thoughts", "thought_detail"],
     )
 
@@ -234,6 +288,47 @@ async def create_project_from_thought(ctx, params: CreateProjectFromThoughtParam
     return ActionResult.success(
         summary=f"Project '{params.name}' created from thought.",
         data={"project_id": proj.id, "thought_id": params.thought_id},
+        refresh_panels=["thoughts", "thought_detail"],
+    )
+
+
+@chat.function(
+    "quick_new_project",
+    description=(
+        "Start a brand-new Project directly, with no existing Thought yet -- "
+        "for when the user just wants an empty project shell to fill in, the "
+        "same way a fresh 'New chat' starts empty. Creates a companion Thought "
+        "under the hood (Projects always grow from a Thought in this app's "
+        "model) and immediately graduates it, so the user lands on one ready "
+        "project, not a two-step flow."
+    ),
+    action_type="write",
+    effects=["thought.create", "project.create"],
+)
+async def quick_new_project(ctx, params: QuickNewProjectParams) -> ActionResult:
+    now = now_iso()
+    name = params.name.strip() or "New project"
+    thought_doc = await ctx.store.create("thoughts", {
+        "title": name,
+        "status": "open",
+        "message_count": 0,
+        "project_id": "",
+        "imported_from_code": False,
+        "created_at": now,
+        "last_activity_at": now,
+    })
+    proj = await ctx.store.create("projects", {
+        "thought_id": thought_doc.id,
+        "name": name,
+        "description": "",
+        "status": "active",
+        "external_ref": "",
+        "created_at": now,
+    })
+    await ctx.store.update("thoughts", thought_doc.id, {"project_id": proj.id})
+    return ActionResult.success(
+        summary=f"Started a new project: {name}",
+        data={"project_id": proj.id, "thought_id": thought_doc.id},
         refresh_panels=["thoughts", "thought_detail"],
     )
 
@@ -586,8 +681,12 @@ async def thoughts_panel(ctx, status: str = "open", **kwargs) -> object:
     ]
     projects_section = ui.Section(
         title="📁 Projects",
-        children=[ui.List(items=project_items)] if project_items else [
-            ui.Text("No projects yet — turn a thought into one from its detail view.", variant="caption"),
+        children=[
+            ui.Button(
+                "+ New project", variant="secondary", size="sm", full_width=True,
+                on_click=ui.Call("quick_new_project"),
+            ),
+            ui.List(items=project_items) if project_items else ui.Text("No projects yet.", variant="caption"),
         ],
     )
 
@@ -639,20 +738,36 @@ async def thoughts_panel(ctx, status: str = "open", **kwargs) -> object:
 
 def _composer(thought_id: str) -> object:
     """Shared message-input row: same shape whether starting fresh or
-    continuing an existing thought -- only the target function differs."""
-    if thought_id:
-        return ui.TextArea(
+    continuing an existing thought -- only the target function differs.
+
+    Includes a voice-note attach control. STUB, stated honestly: this
+    platform has no live microphone-capture UI primitive (verified against
+    the real ui.* set -- ui.Audio is playback-only), so this is an
+    already-recorded-file upload, not a record button, and it does not
+    transcribe -- see attach_voice_note's docstring."""
+    text_field = (
+        ui.TextArea(
             placeholder="Reply...",
             rows=2,
             param_name="text",
             on_submit=ui.Call("add_thought_message", thought_id=thought_id, role="user"),
         )
-    return ui.TextArea(
-        placeholder="Tell Webbee an idea...",
-        rows=3,
-        param_name="first_message",
-        on_submit=ui.Call("start_thought"),
+        if thought_id
+        else ui.TextArea(
+            placeholder="Tell Webbee an idea...",
+            rows=3,
+            param_name="first_message",
+            on_submit=ui.Call("start_thought"),
+        )
     )
+    voice_upload = ui.FileUpload(
+        accept="audio/*",
+        param_name="files",
+        title="🎤 Attach voice note",
+        hint="Upload an audio recording — not live dictation yet, and it isn't transcribed.",
+        on_upload=ui.Call("attach_voice_note", thought_id=thought_id),
+    )
+    return ui.Stack(direction="v", gap=2, children=[text_field, voice_upload])
 
 
 @ext.panel("thought_detail", slot="center", title="Thought", icon="💭", center_overlay=True)

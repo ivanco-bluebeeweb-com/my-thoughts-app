@@ -120,6 +120,17 @@ class AddThoughtMessageParams(BaseModel):
     text: str = Field(description="The FULL message text — the actual content, never a placeholder.")
 
 
+class AttachVoiceNoteParams(BaseModel):
+    """Stub handler for the composer's audio-attach control. There is no
+    live microphone-capture UI primitive on this platform (verified against
+    the real ui.* primitive set: ui.Audio is playback-only) -- this accepts
+    an already-recorded audio FILE the user uploads, and records that it was
+    attached. It does NOT transcribe it; there is no speech-to-text wired up
+    yet, and this function does not pretend otherwise."""
+    thought_id: str = Field(default="", description="Thought UUID to attach the voice note to, or empty for a brand-new thought.")
+    files: list = Field(default_factory=list, description="Uploaded file record(s) forwarded by the FileUpload widget.")
+
+
 class ListThoughtsParams(BaseModel):
     status: str = Field(default="", description="Optional filter: 'open' or 'archived'. Empty = all.")
     limit: int = Field(default=50, description="Max thoughts to return.")
@@ -136,6 +147,10 @@ class ArchiveThoughtParams(BaseModel):
 class RenameThoughtParams(BaseModel):
     thought_id: str = Field(description="Thought UUID.")
     title: str = Field(description="New title for the thought.")
+
+
+class QuickNewProjectParams(BaseModel):
+    name: str = Field(default="", description="Project name. Leave empty for a sensible default the user can rename later.")
 
 
 class CreateProjectFromThoughtParams(BaseModel):
