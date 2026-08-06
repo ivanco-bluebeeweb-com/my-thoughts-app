@@ -679,7 +679,6 @@ async def thought_detail_panel(ctx, thought_id: str = "", show_share: bool = Fal
                 placeholder="Thought title",
                 value=thought.data.get("title", ""),
                 param_name="title",
-                type="text",
                 on_submit=ui.Call("rename_thought", thought_id=thought_id),
             ),
             ui.Text("Press Enter to save.", variant="caption"),
