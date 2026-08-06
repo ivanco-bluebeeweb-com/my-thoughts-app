@@ -12,7 +12,7 @@ import secrets as _pysecrets
 from datetime import datetime, timezone
 
 from schemas import (
-    Thought, ThoughtMessage, Project, ProposedAction, ShareLink,
+    Thought, ThoughtMessage, ThoughtChain, ProposedAction, ShareLink,
 )
 
 
@@ -74,7 +74,7 @@ def to_thought(doc) -> Thought:
         title=d.get("title", ""),
         status=d.get("status", "open"),
         message_count=d.get("message_count", 0),
-        project_id=d.get("project_id", ""),
+        chain_id=d.get("chain_id", ""),
         imported_from_code=d.get("imported_from_code", False),
         created_at=d.get("created_at", ""),
         last_activity_at=d.get("last_activity_at", ""),
@@ -92,9 +92,9 @@ def to_message(doc) -> ThoughtMessage:
     )
 
 
-def to_project(doc) -> Project:
+def to_thought_chain(doc) -> ThoughtChain:
     d = doc.data
-    return Project(
+    return ThoughtChain(
         id=doc.id,
         thought_id=d.get("thought_id", ""),
         name=d.get("name", ""),

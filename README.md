@@ -5,7 +5,7 @@ A Webbee-to-user discussion space — purely between you and Webbee, not a share
 You bring an idea, discuss it over time in a thread (a **Thought**), and Webbee quietly
 analyzes your open Thoughts once a day in the background (`@ext.schedule`) to propose
 concrete next actions tied to real installed apps (Trello, Asana, WP Site Connector, etc.).
-A Thought can graduate into a **Project**, and can be shared with another Imperal user as a
+A Thought can graduate into a **Thought Chain**, and can be shared with another Imperal user as a
 self-contained snapshot code.
 
 ## Core flow
@@ -18,7 +18,7 @@ self-contained snapshot code.
    `pending`). It never proposes twice while one is still pending on the same Thought.
 4. `respond_to_action` — approve or dismiss. **Approving never auto-executes anything** — it just
    flips status to `approved`; the real tool call happens afterward, as an ordinary chat action.
-5. `create_project_from_thought` — graduate a Thought into a `Project` once it's concrete enough
+5. `create_thought_chain` — graduate a Thought into a `Thought Chain` once it's concrete enough
    to track as a deliverable.
 
 ## Sharing — the honest version

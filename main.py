@@ -3,7 +3,7 @@
 You bring an idea, we discuss it over time in a thread ("Thought"), and
 Webbee quietly analyzes the accumulated context in the background
 (@ext.schedule) to propose concrete next actions tied to real installed
-apps. A Thought can graduate into a Project, and can be shared with
+apps. A Thought can graduate into a Thought Chain, and can be shared with
 another Imperal user as a self-contained, read-only snapshot code.
 
 Boundaries (by design):
@@ -34,18 +34,18 @@ from imperal_sdk import ActionResult, Extension, ChatExtension, ui
 
 from schemas import (
     Thought, ThoughtList, ThoughtMessage, ThoughtMessageList,
-    Project, ProjectList, ProposedAction, ProposedActionList,
+    ThoughtChain, ThoughtChainList, ProposedAction, ProposedActionList,
     ShareLink, ShareLinkList,
     CreateThoughtParams, StartThoughtParams, AddThoughtMessageParams, AttachVoiceNoteParams,
     ListThoughtsParams,
     GetThoughtParams, ArchiveThoughtParams, RenameThoughtParams,
-    CreateProjectFromThoughtParams, QuickNewProjectParams, ListProjectsParams,
+    CreateThoughtChainFromThoughtParams, QuickNewThoughtChainParams, ListThoughtChainsParams,
     ListProposedActionsParams, ProposeActionParams, RespondToActionParams,
     CreateShareLinkParams, ListShareLinksParams, ForgetShareParams,
     ImportSharedThoughtParams,
 )
 from converters import (
-    now_iso, to_thought, to_message, to_project,
+    now_iso, to_thought, to_message, to_thought_chain,
     to_proposed_action, to_share_link, looks_actionable, hours_since,
     encode_share_code, decode_share_code,
     auto_title_from_message, group_thoughts_by_recency,
@@ -57,7 +57,7 @@ ext = Extension(
     display_name="My Thoughts",
     description=(
         "Discuss your ideas with Webbee over time, turn discussions into "
-        "projects, and share select discussions with other users. Webbee "
+        "Thought Chains, and share select discussions with other users. Webbee "
         "analyzes your thoughts in the background and proposes concrete "
         "next actions across your other apps."
     ),
@@ -67,7 +67,7 @@ ext = Extension(
 
 chat = ChatExtension(
     ext, "my_thoughts",
-    description="Create and manage discussion threads (Thoughts), graduate them into Projects, review Webbee's proposed actions, and share Thoughts with other users.",
+    description="Create and manage discussion threads (Thoughts), graduate them into Thought Chains, review Webbee's proposed actions, and share Thoughts with other users.",
 )
 
 
@@ -88,7 +88,7 @@ async def create_thought(ctx, params: CreateThoughtParams) -> ActionResult:
         "title": params.title,
         "status": "open",
         "message_count": 0,
-        "project_id": "",
+        "chain_id": "",
         "imported_from_code": False,
         "created_at": now,
         "last_activity_at": now,
@@ -159,7 +159,7 @@ async def attach_voice_note(ctx, params: AttachVoiceNoteParams) -> ActionResult:
             "title": "Voice note",
             "status": "open",
             "message_count": 0,
-            "project_id": "",
+            "chain_id": "",
             "imported_from_code": False,
             "created_at": now,
             "last_activity_at": now,
@@ -261,22 +261,22 @@ async def rename_thought(ctx, params: RenameThoughtParams) -> ActionResult:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Projects — what a Thought graduates into
+# Thought Chains — what a Thought graduates into
 # ──────────────────────────────────────────────────────────────────────────
 
 
 @chat.function(
-    "create_project_from_thought",
-    description="Graduate a Thought into a Project — the moment an idea becomes something to actually execute. Does not by itself create anything in Trello/Asana/etc — pair it with a real tool call on the target app if the user wants that.",
+    "create_thought_chain",
+    description="Graduate a Thought into a Thought Chain — the moment an idea becomes something to actually execute. Does not by itself create anything in Trello/Asana/etc — pair it with a real tool call on the target app if the user wants that.",
     action_type="write",
-    effects=["project.create", "thought.update"],
+    effects=["thought_chain.create", "thought.update"],
 )
-async def create_project_from_thought(ctx, params: CreateProjectFromThoughtParams) -> ActionResult:
+async def create_thought_chain(ctx, params: CreateThoughtChainFromThoughtParams) -> ActionResult:
     thought = await ctx.store.get("thoughts", params.thought_id)
     if thought is None:
         return ActionResult.error("Thought not found.", code="THOUGHT_NOT_FOUND")
     now = now_iso()
-    proj = await ctx.store.create("projects", {
+    chain = await ctx.store.create("thought_chains", {
         "thought_id": params.thought_id,
         "name": params.name,
         "description": params.description,
@@ -284,40 +284,40 @@ async def create_project_from_thought(ctx, params: CreateProjectFromThoughtParam
         "external_ref": "",
         "created_at": now,
     })
-    await ctx.store.update("thoughts", params.thought_id, {"project_id": proj.id})
+    await ctx.store.update("thoughts", params.thought_id, {"chain_id": chain.id})
     return ActionResult.success(
-        summary=f"Project '{params.name}' created from thought.",
-        data={"project_id": proj.id, "thought_id": params.thought_id},
+        summary=f"Thought Chain '{params.name}' created from thought.",
+        data={"chain_id": chain.id, "thought_id": params.thought_id},
         refresh_panels=["thoughts", "thought_detail"],
     )
 
 
 @chat.function(
-    "quick_new_project",
+    "quick_new_thought_chain",
     description=(
-        "Start a brand-new Project directly, with no existing Thought yet -- "
-        "for when the user just wants an empty project shell to fill in, the "
+        "Start a brand-new Thought Chain directly, with no existing Thought yet -- "
+        "for when the user just wants an empty Thought Chain shell to fill in, the "
         "same way a fresh 'New chat' starts empty. Creates a companion Thought "
-        "under the hood (Projects always grow from a Thought in this app's "
+        "under the hood (Thought Chains always grow from a Thought in this app's "
         "model) and immediately graduates it, so the user lands on one ready "
-        "project, not a two-step flow."
+        "Thought Chain, not a two-step flow."
     ),
     action_type="write",
-    effects=["thought.create", "project.create"],
+    effects=["thought.create", "thought_chain.create"],
 )
-async def quick_new_project(ctx, params: QuickNewProjectParams) -> ActionResult:
+async def quick_new_thought_chain(ctx, params: QuickNewThoughtChainParams) -> ActionResult:
     now = now_iso()
-    name = params.name.strip() or "New project"
+    name = params.name.strip() or "New Thought Chain"
     thought_doc = await ctx.store.create("thoughts", {
         "title": name,
         "status": "open",
         "message_count": 0,
-        "project_id": "",
+        "chain_id": "",
         "imported_from_code": False,
         "created_at": now,
         "last_activity_at": now,
     })
-    proj = await ctx.store.create("projects", {
+    chain = await ctx.store.create("thought_chains", {
         "thought_id": thought_doc.id,
         "name": name,
         "description": "",
@@ -325,24 +325,24 @@ async def quick_new_project(ctx, params: QuickNewProjectParams) -> ActionResult:
         "external_ref": "",
         "created_at": now,
     })
-    await ctx.store.update("thoughts", thought_doc.id, {"project_id": proj.id})
+    await ctx.store.update("thoughts", thought_doc.id, {"chain_id": chain.id})
     return ActionResult.success(
-        summary=f"Started a new project: {name}",
-        data={"project_id": proj.id, "thought_id": thought_doc.id},
+        summary=f"Started a new Thought Chain: {name}",
+        data={"chain_id": chain.id, "thought_id": thought_doc.id},
         refresh_panels=["thoughts", "thought_detail"],
     )
 
 
 @chat.function(
-    "list_projects",
-    description="List projects that were graduated from Thoughts.",
+    "list_thought_chains",
+    description="List Thought Chains that were graduated from Thoughts.",
     action_type="read",
-    data_model=ProjectList,
+    data_model=ThoughtChainList,
 )
-async def list_projects(ctx, params: ListProjectsParams) -> ActionResult:
-    page = await ctx.store.query("projects", order_by="-created_at", limit=params.limit)
-    items = [to_project(d) for d in page.data]
-    return ActionResult.success(summary=f"{len(items)} project(s).", data=ProjectList(items=items, total=len(items)))
+async def list_thought_chains(ctx, params: ListThoughtChainsParams) -> ActionResult:
+    page = await ctx.store.query("thought_chains", order_by="-created_at", limit=params.limit)
+    items = [to_thought_chain(d) for d in page.data]
+    return ActionResult.success(summary=f"{len(items)} Thought Chain(s).", data=ThoughtChainList(items=items, total=len(items)))
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -510,7 +510,7 @@ async def import_shared_thought(ctx, params: ImportSharedThoughtParams) -> Actio
         "title": f"{src_title} (shared)",
         "status": "open",
         "message_count": len(src_messages),
-        "project_id": "",
+        "chain_id": "",
         "imported_from_code": True,
         "created_at": now,
         "last_activity_at": now,
@@ -640,7 +640,7 @@ async def _scan_one_user(user_ctx) -> None:
 
 # ──────────────────────────────────────────────────────────────────────────
 # Panels — ChatGPT-shaped: left = conversation list + always-visible
-# Projects, center = the open thread (or an empty composer by default),
+# Thought Chains, center = the open thread (or an empty composer by default),
 # right = reserved empty slot for future use (per explicit user decision).
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -660,33 +660,33 @@ async def thoughts_panel(ctx, status: str = "open", **kwargs) -> object:
     thoughts_page = await ctx.store.query(
         "thoughts", where={"status": status} if status else None, order_by="-created_at", limit=100,
     )
-    projects_page = await ctx.store.query("projects", order_by="-created_at", limit=50)
+    chains_page = await ctx.store.query("thought_chains", order_by="-created_at", limit=50)
 
     new_thought_button = ui.Button(
         "+ New thought", variant="primary", size="sm", full_width=True,
         on_click=ui.Call("__panel__thought_detail"),  # no thought_id -> empty composer
     )
 
-    # Projects: always visible (per explicit decision), never collapsed away.
-    project_items = [
+    # Thought Chains: always visible (per explicit decision), never collapsed away.
+    chain_items = [
         ui.ListItem(
-            id=p.id,
-            title=p.data.get("name", "(untitled project)"),
-            subtitle=p.data.get("description", "")[:60],
-            icon="📁",
-            badge=ui.Badge(p.data.get("status", "active"), color="green" if p.data.get("status") == "active" else "gray"),
-            on_click=ui.Call("__panel__thought_detail", thought_id=p.data.get("thought_id", "")),
+            id=c.id,
+            title=c.data.get("name", "(untitled Thought Chain)"),
+            subtitle=c.data.get("description", "")[:60],
+            icon="🔗",
+            badge=ui.Badge(c.data.get("status", "active"), color="green" if c.data.get("status") == "active" else "gray"),
+            on_click=ui.Call("__panel__thought_detail", thought_id=c.data.get("thought_id", "")),
         )
-        for p in projects_page.data
+        for c in chains_page.data
     ]
-    projects_section = ui.Section(
-        title="📁 Projects",
+    chains_section = ui.Section(
+        title="🔗 Thought Chains",
         children=[
             ui.Button(
-                "+ New project", variant="secondary", size="sm", full_width=True,
-                on_click=ui.Call("quick_new_project"),
+                "+ New Thought Chain", variant="secondary", size="sm", full_width=True,
+                on_click=ui.Call("quick_new_thought_chain"),
             ),
-            ui.List(items=project_items) if project_items else ui.Text("No projects yet.", variant="caption"),
+            ui.List(items=chain_items) if chain_items else ui.Text("No Thought Chains yet.", variant="caption"),
         ],
     )
 
@@ -725,7 +725,7 @@ async def thoughts_panel(ctx, status: str = "open", **kwargs) -> object:
 
     root = ui.Stack(direction="v", gap=3, children=[
         new_thought_button,
-        projects_section,
+        chains_section,
         ui.Divider(),
         thoughts_section,
     ])
@@ -811,9 +811,9 @@ async def thought_detail_panel(ctx, thought_id: str = "", show_share: bool = Fal
     header_actions = ui.Row(gap=2, children=[
         ui.Button("🔗 Share", variant="secondary", size="sm",
                   on_click=ui.Call("__panel__thought_detail", thought_id=thought_id, show_share=not show_share)),
-        (ui.Button("📁 Turn into a Project", variant="primary", size="sm",
-                   on_click=ui.Call("create_project_from_thought", thought_id=thought_id, name=thought.data.get("title", "")))
-         if not thought.data.get("project_id") else ui.Badge("Project ✅", color="green")),
+        (ui.Button("🔗 Turn into a Thought Chain", variant="primary", size="sm",
+                   on_click=ui.Call("create_thought_chain", thought_id=thought_id, name=thought.data.get("title", "")))
+         if not thought.data.get("chain_id") else ui.Badge("Thought Chain ✅", color="green")),
     ])
 
     # Inline share panel -- no modal (Dialog has no click trigger to open

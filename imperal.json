@@ -220,9 +220,9 @@
                 "title": "Message Count",
                 "type": "integer"
               },
-              "project_id": {
+              "chain_id": {
                 "default": "",
-                "title": "Project Id",
+                "title": "Chain Id",
                 "type": "string"
               },
               "imported_from_code": {
@@ -542,30 +542,30 @@
       "owner_chat_tool": "my_thoughts"
     },
     {
-      "name": "create_project_from_thought",
-      "description": "Graduate a Thought into a Project — the moment an idea becomes something to actually execute. Does not by itself create anything in Trello/Asana/etc — pair it with a real tool call on the target app if the user wants that.",
+      "name": "create_thought_chain",
+      "description": "Graduate a Thought into a Thought Chain — the moment an idea becomes something to actually execute. Does not by itself create anything in Trello/Asana/etc — pair it with a real tool call on the target app if the user wants that.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
-        "project.create",
+        "thought_chain.create",
         "thought.update"
       ],
       "id_projection": "",
       "params_schema": {
         "properties": {
           "thought_id": {
-            "description": "Thought UUID to graduate into a project.",
+            "description": "Thought UUID to graduate into a Thought Chain.",
             "title": "Thought Id",
             "type": "string"
           },
           "name": {
-            "description": "Project name.",
+            "description": "Thought Chain name.",
             "title": "Name",
             "type": "string"
           },
           "description": {
             "default": "",
-            "description": "Optional project description.",
+            "description": "Optional Thought Chain description.",
             "title": "Description",
             "type": "string"
           }
@@ -574,7 +574,7 @@
           "thought_id",
           "name"
         ],
-        "title": "CreateProjectFromThoughtParams",
+        "title": "CreateThoughtChainFromThoughtParams",
         "type": "object"
       },
       "return_schema": {},
@@ -585,25 +585,25 @@
       "owner_chat_tool": "my_thoughts"
     },
     {
-      "name": "quick_new_project",
-      "description": "Start a brand-new Project directly, with no existing Thought yet -- for when the user just wants an empty project shell to fill in, the same way a fresh 'New chat' starts empty. Creates a companion Thought under the hood (Projects always grow from a Thought in this app's model) and immediately graduates it, so the user lands on one ready project, not a two-step flow.",
+      "name": "quick_new_thought_chain",
+      "description": "Start a brand-new Thought Chain directly, with no existing Thought yet -- for when the user just wants an empty Thought Chain shell to fill in, the same way a fresh 'New chat' starts empty. Creates a companion Thought under the hood (Thought Chains always grow from a Thought in this app's model) and immediately graduates it, so the user lands on one ready Thought Chain, not a two-step flow.",
       "action_type": "write",
       "chain_callable": true,
       "effects": [
         "thought.create",
-        "project.create"
+        "thought_chain.create"
       ],
       "id_projection": "",
       "params_schema": {
         "properties": {
           "name": {
             "default": "",
-            "description": "Project name. Leave empty for a sensible default the user can rename later.",
+            "description": "Thought Chain name. Leave empty for a sensible default the user can rename later.",
             "title": "Name",
             "type": "string"
           }
         },
-        "title": "QuickNewProjectParams",
+        "title": "QuickNewThoughtChainParams",
         "type": "object"
       },
       "return_schema": {},
@@ -614,8 +614,8 @@
       "owner_chat_tool": "my_thoughts"
     },
     {
-      "name": "list_projects",
-      "description": "List projects that were graduated from Thoughts.",
+      "name": "list_thought_chains",
+      "description": "List Thought Chains that were graduated from Thoughts.",
       "action_type": "read",
       "chain_callable": true,
       "effects": [],
@@ -624,17 +624,17 @@
         "properties": {
           "limit": {
             "default": 50,
-            "description": "Max projects to return.",
+            "description": "Max Thought Chains to return.",
             "title": "Limit",
             "type": "integer"
           }
         },
-        "title": "ListProjectsParams",
+        "title": "ListThoughtChainsParams",
         "type": "object"
       },
       "return_schema": {
         "$defs": {
-          "Project": {
+          "ThoughtChain": {
             "description": "A thought that graduated into something actionable.",
             "properties": {
               "id": {
@@ -716,7 +716,7 @@
             "required": [
               "id"
             ],
-            "title": "Project",
+            "title": "ThoughtChain",
             "type": "object",
             "x-sdl": "entity"
           }
@@ -724,7 +724,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/$defs/Project"
+              "$ref": "#/$defs/ThoughtChain"
             },
             "title": "Items",
             "type": "array"
@@ -762,7 +762,7 @@
         "required": [
           "items"
         ],
-        "title": "ProjectList",
+        "title": "ThoughtChainList",
         "type": "object",
         "x-sdl": "entity-list"
       },

@@ -1,6 +1,6 @@
 """Extension test suite for My Thoughts -- exercises the core flow
 (create thought -> discuss -> propose action -> approve, graduate to
-project, share + import) against imperal_sdk's MockContext.
+a Thought Chain, share + import) against imperal_sdk's MockContext.
 """
 import sys
 from pathlib import Path
@@ -15,7 +15,7 @@ import main as m
 from schemas import (
     CreateThoughtParams, AddThoughtMessageParams, ListThoughtsParams,
     GetThoughtParams, ArchiveThoughtParams,
-    CreateProjectFromThoughtParams, ListProjectsParams,
+    CreateThoughtChainFromThoughtParams, ListThoughtChainsParams,
     ProposeActionParams, ListProposedActionsParams, RespondToActionParams,
     CreateShareLinkParams, ListShareLinksParams, ForgetShareParams,
     ImportSharedThoughtParams,
@@ -114,34 +114,34 @@ async def test_get_thought_returns_messages_in_order():
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Projects
+# Thought Chains
 # ──────────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_create_project_from_thought_links_back():
+async def test_create_thought_chain_from_thought_links_back():
     ctx = MockContext()
     created = await m.create_thought(ctx, CreateThoughtParams(title="New client onboarding flow"))
     thought_id = created.data["thought_id"]
 
-    result = await m.create_project_from_thought(ctx, CreateProjectFromThoughtParams(
+    result = await m.create_thought_chain(ctx, CreateThoughtChainFromThoughtParams(
         thought_id=thought_id, name="Onboarding flow v1",
         description="Turn the discussion into a real checklist + Trello board.",
     ))
     assert result.status == "success"
-    project_id = result.data["project_id"]
+    chain_id = result.data["chain_id"]
 
     thought_doc = await ctx.store.get("thoughts", thought_id)
-    assert thought_doc.data["project_id"] == project_id
+    assert thought_doc.data["chain_id"] == chain_id
 
-    projects = await m.list_projects(ctx, ListProjectsParams())
-    assert any(p.id == project_id for p in projects.data.items)
+    chains = await m.list_thought_chains(ctx, ListThoughtChainsParams())
+    assert any(c.id == chain_id for c in chains.data.items)
 
 
 @pytest.mark.asyncio
-async def test_create_project_from_missing_thought_errors():
+async def test_create_thought_chain_from_missing_thought_errors():
     ctx = MockContext()
-    result = await m.create_project_from_thought(ctx, CreateProjectFromThoughtParams(
+    result = await m.create_thought_chain(ctx, CreateThoughtChainFromThoughtParams(
         thought_id="missing", name="X",
     ))
     assert result.status != "success"

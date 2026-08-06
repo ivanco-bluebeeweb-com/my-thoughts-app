@@ -21,7 +21,7 @@ class Thought(sdl.Entity):
     title: str = ""
     status: str = ""  # open | archived
     message_count: int = 0
-    project_id: str = ""  # set once graduated into a Project
+    chain_id: str = ""  # set once graduated into a Thought Chain
     imported_from_code: bool = False  # true if this thread was created via import_shared_thought
     created_at: str = ""
     last_activity_at: str = ""
@@ -44,7 +44,7 @@ class ThoughtMessageList(sdl.EntityList[ThoughtMessage]):
     pass
 
 
-class Project(sdl.Entity):
+class ThoughtChain(sdl.Entity):
     """A thought that graduated into something actionable."""
     title: str = ""  # mirrors `name` below, satisfies sdl.Entity's required base field
     thought_id: str = ""
@@ -55,7 +55,7 @@ class Project(sdl.Entity):
     created_at: str = ""
 
 
-class ProjectList(sdl.EntityList[Project]):
+class ThoughtChainList(sdl.EntityList[ThoughtChain]):
     pass
 
 
@@ -149,18 +149,18 @@ class RenameThoughtParams(BaseModel):
     title: str = Field(description="New title for the thought.")
 
 
-class QuickNewProjectParams(BaseModel):
-    name: str = Field(default="", description="Project name. Leave empty for a sensible default the user can rename later.")
+class QuickNewThoughtChainParams(BaseModel):
+    name: str = Field(default="", description="Thought Chain name. Leave empty for a sensible default the user can rename later.")
 
 
-class CreateProjectFromThoughtParams(BaseModel):
-    thought_id: str = Field(description="Thought UUID to graduate into a project.")
-    name: str = Field(description="Project name.")
-    description: str = Field(default="", description="Optional project description.")
+class CreateThoughtChainFromThoughtParams(BaseModel):
+    thought_id: str = Field(description="Thought UUID to graduate into a Thought Chain.")
+    name: str = Field(description="Thought Chain name.")
+    description: str = Field(default="", description="Optional Thought Chain description.")
 
 
-class ListProjectsParams(BaseModel):
-    limit: int = Field(default=50, description="Max projects to return.")
+class ListThoughtChainsParams(BaseModel):
+    limit: int = Field(default=50, description="Max Thought Chains to return.")
 
 
 class ListProposedActionsParams(BaseModel):
