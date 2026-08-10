@@ -47,6 +47,37 @@
       "owner_chat_tool": "my_thoughts"
     },
     {
+      "name": "start_thought",
+      "description": "Start a brand-new Thought from the empty composer (no title field -- the title is auto-derived from the first message), the same way a fresh 'New chat' begins from your first message. Used by the always-on empty composer at the bottom of the New-thought screen.",
+      "action_type": "write",
+      "chain_callable": true,
+      "effects": [
+        "thought.create"
+      ],
+      "id_projection": "",
+      "params_schema": {
+        "description": "Used by the empty-composer UI: no separate title field -- the title\nis auto-derived from the first message, the same way ChatGPT starts an\nuntitled chat from your first message.",
+        "properties": {
+          "first_message": {
+            "description": "The FULL first message content -- the actual text, never a placeholder.",
+            "title": "First Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "first_message"
+        ],
+        "title": "StartThoughtParams",
+        "type": "object"
+      },
+      "return_schema": {},
+      "event": "",
+      "background": false,
+      "long_running": false,
+      "scopes": [],
+      "owner_chat_tool": "my_thoughts"
+    },
+    {
       "name": "add_thought_message",
       "description": "Append a message to an existing Thought's discussion — either the user's own words or Webbee's reply, keeping the running conversation.",
       "action_type": "write",
