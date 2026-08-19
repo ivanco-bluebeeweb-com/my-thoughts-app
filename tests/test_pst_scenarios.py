@@ -95,3 +95,72 @@ async def test_happy_quick_new_thought_chain_default_name_when_empty():
     ctx = MockContext()
     result = await m.quick_new_thought_chain(ctx, QuickNewThoughtChainParams(name=""))
     assert result.error is None
+
+
+# ── Part D2 (SCENARIO_TESTING_STANDARD.md): idempotency / double-invocation ─
+
+@pytest.mark.asyncio
+async def test_d2_double_archive_thought_is_idempotent():
+    """archive_thought sets status='archived' -- calling it again on an
+    already-archived thought must remain a clean success (still archived),
+    not error, since the desired end state is already reached."""
+    from schemas import ArchiveThoughtParams
+    ctx = MockContext()
+    created = await m.create_thought(ctx, CreateThoughtParams(title="To archive"))
+    thought_id = created.data["thought_id"] if isinstance(created.data, dict) else created.data.get("thought_id")
+
+    first = await m.archive_thought(ctx, ArchiveThoughtParams(thought_id=thought_id))
+    assert first.error is None
+
+    second = await m.archive_thought(ctx, ArchiveThoughtParams(thought_id=thought_id))
+    assert second.error is None
+
+
+@pytest.mark.asyncio
+async def test_d2_double_forget_share_fails_clean_on_the_second_call():
+    """forget_share checks store existence (by label) before deleting -- a
+    retried forget on a share record already removed by the first call
+    must return a clean not-found error, never crash."""
+    from schemas import ForgetShareParams
+    ctx = MockContext()
+    await ctx.store.create("share_links", {"label": "team-update", "share_code": "abc123"})
+
+    first = await m.forget_share(ctx, ForgetShareParams(label="team-update"))
+    assert first.error is None
+
+    second = await m.forget_share(ctx, ForgetShareParams(label="team-update"))
+    assert second.error is not None
+    assert second.error_code == "SHARELINK_NOT_FOUND"
+
+
+# ── Part D3 (SCENARIO_TESTING_STANDARD.md): security / SSRF surface -------
+
+def test_d3_no_ssrf_share_codes_are_self_contained_never_fetched():
+    """import_shared_thought/create_share_link work off a self-contained
+    encoded share_code (decode_share_code/encode as pure local string
+    transforms) -- this app makes no outbound HTTP calls at all. Regression
+    trip-wire: if ctx.http (or httpx/requests/urlopen) is ever introduced,
+    this test must be revisited alongside a real SSRF review."""
+    import inspect
+    import main as m
+    import converters as conv
+    source = inspect.getsource(m) + inspect.getsource(conv)
+    assert "ctx.http" not in source
+    assert "httpx" not in source
+    assert "requests." not in source
+    assert "urlopen" not in source
+
+
+def test_d3_no_ssrf_no_http_client_used_anywhere_in_this_app():
+    """This app has no outbound HTTP surface at all -- sharing is done via
+    a self-contained, locally-encoded/decoded share_code (see schemas.py's
+    own docstring: 'share content travels self-contained in the code/url
+    itself'), never a fetch. Grep across main.py confirms no ctx.http/
+    httpx/requests/urlopen call exists. This is a regression trip-wire: if
+    a future feature adds one (e.g. fetching a remote share link), it
+    needs its own explicit SSRF review at that point."""
+    import inspect
+    import main as mod
+    src = inspect.getsource(mod)
+    for needle in ("ctx.http.", "httpx.", "requests.", "urlopen("):
+        assert needle not in src, f"Found new HTTP surface ({needle}) -- give it an SSRF review."
